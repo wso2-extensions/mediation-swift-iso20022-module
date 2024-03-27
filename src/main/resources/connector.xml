@@ -20,6 +20,7 @@
     <component name="swiftISO20022" package="org.wso2.carbon.module.swiftiso20022">
         <dependency component="jsonToMT940"/>
         <dependency component="mt940Validator"/>
+        <dependency component="jsonToMT103"/>
         <description>WSO2 SWIFT ISO 20022 Mediation library</description>
     </component>
     <type>module</type>

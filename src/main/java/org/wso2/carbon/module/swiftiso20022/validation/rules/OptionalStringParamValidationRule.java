@@ -48,7 +48,7 @@ public class OptionalStringParamValidationRule implements ValidationRule {
         for (ValidatorContext ctx : validationParamList) {
             if (payload.has(ctx.getFieldName())) {
                 Object value = payload.get(ctx.getFieldName());
-                if (value instanceof String && StringUtils.isEmpty(value.toString())) {
+                if (value instanceof String && StringUtils.isBlank(value.toString())) {
                     return new ValidationResult(ConnectorConstants.ERROR_CODE_MISSING_PARAM,
                             String.format(ConnectorConstants.ERROR_OPTIONAL_PARAM_MISSING,
                                     ctx.getFieldDisplayName()));

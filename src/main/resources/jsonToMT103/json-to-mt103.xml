@@ -1,0 +1,63 @@
+<!--
+   Copyright (c) 2024, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+
+   WSO2 Inc. licenses this file to you under the Apache License,
+   Version 2.0 (the "License"); you may not use this file except
+   in compliance with the License.
+   You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied. See the License for the
+   specific language governing permissions and limitations
+   under the License.
+-->
+<template xmlns="http://ws.apache.org/ns/synapse" name="jsonToMT103">
+    <sequence>
+        <class name="org.wso2.carbon.module.swiftiso20022.JsonToMT103Validator" />
+        <payloadFactory media-type="text" template-type="freemarker">
+            <format><![CDATA[<#macro printIfAvailable var tag><#if var?length != 0 >{${tag}:${var}}</#if></#macro>
+<#macro printEntity var=false tag=""><#if var?is_hash_ex >${"\n"}:${tag}${var.option}:<#list var.details as dt><#if dt?index != 0 >${"\n"}</#if>${dt}</#list></#if></#macro>
+{1:F01${payload.block01.logicalTerminalAddress}${payload.block01.sessionNumber}${payload.block01.sequenceNumber}}<#if payload.block02?? >{2:${payload.block02.inputOutputIdentifier}103<#if payload.block02.inputOutputIdentifier == "I">${payload.block02.destinationLogicalTerminalAddress}${payload.block02.priority!}${payload.block02.deliveryMonitoringCode!}${payload.block02.obsolescenePeriodCode!}<#else>${payload.block02.inputTime}${payload.block02.messageInputReference}${payload.block02.outputDate}${payload.block02.outputTime}${payload.block02.priority!}</#if>}</#if>{3:{103:${payload.block03.serviceIdentifier}}<@printIfAvailable payload.block03.bankingPriority!"" "113"/><@printIfAvailable payload.block03.messageUserReference!"" "108"/><@printIfAvailable payload.block03.validationFlag!"" "119"/><@printIfAvailable payload.block03.serviceTypeIdentifier!"" "111"/>{121:${payload.block03.endToEndReference}}}{4:
+<#compress>
+:20:${payload.block04.sendersReference}
+<#if payload.block04.timeIndication?? >
+   <#list payload.block04.timeIndication as ti>${"\n:13C:"}${ti}</#list>
+</#if>
+:23B:${payload.block04.bankOperationCode}
+<#if payload.block04.instructionCodes?? >
+   <#list payload.block04.instructionCodes as ic>${"\n:23E:"}${ic}</#list>
+</#if>
+:32A:${payload.block04.value}
+<#if payload.block04.instructedAmount?? >:33B:${payload.block04.instructedAmount}</#if>
+<#if payload.block04.exchangeRate?? >:36:${payload.block04.exchangeRate}</#if>
+<@printEntity payload.block04.orderingCustomer "50"></@>
+<@printEntity payload.block04.sendingInstitution "51"></@>
+<@printEntity payload.block04.orderingInstitution "52"></@>
+<@printEntity payload.block04.sendersCorrespondent "53"></@>
+<@printEntity payload.block04.receiversCorrespondent "54"></@>
+<@printEntity payload.block04.thirdReimbursementInstitution "55"></@>
+<@printEntity payload.block04.intermediaryInstitution "56"></@>
+<@printEntity payload.block04.accountWithInstitution "57"></@>
+<@printEntity payload.block04.beneficiaryCustomer "59"></@>
+:71A:${payload.block04.detailsOfCharges}
+<#if payload.block04.sendersCharges?? >
+   <#list payload.block04.sendersCharges as sc>${"\n:71F:"}${sc}</#list>
+</#if>
+<#if payload.block04.receiversCharges?? >${"\n:71G:"}${payload.block04.receiversCharges}</#if>
+<#if payload.block04.senderToReceiverInformation?? >
+   <#list payload.block04.senderToReceiverInformation as sri>${"\n"}<#if sri?index == 0 >${":72:"}</#if>${sri}</#list>
+</#if>
+<#if payload.block04.regulatoryReporting?? >
+   <#list payload.block04.regulatoryReporting as rr>${"\n"}<#if rr?index == 0 >${":77B:"}</#if>${rr}</#list>
+</#if>
+<#if payload.block04.envelopeContents??>${"\n:77T:"}${payload.block04.envelopeContents}</#if>
+</#compress>
+${"\n"}-}<#if payload.block05?? >{5:{CHK:${payload.block05.checksum}}<#if payload.block05.testNTrainingMessage??>{TNG:}</#if><@printIfAvailable payload.block05.possibleDuplicateEmission!"" "PDE"/><@printIfAvailable payload.block05.messageReference "MRF"/><#if payload.block05.delayedMessage??>{DLM:}</#if><@printIfAvailable payload.block05.possibleDuplicateMessage!"" "PDM"/><@printIfAvailable payload.block05.systemOriginatedMessage!"" "SYS"/>}</#if>]]></format>
+            <args/>
+        </payloadFactory>
+    </sequence>
+</template>
