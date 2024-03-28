@@ -16,13 +16,13 @@
  ~ specific language governing permissions and limitations
  ~ under the License.
  -->
-<connector>
-    <component name="swiftISO20022" package="org.wso2.carbon.module.swiftiso20022">
-        <dependency component="jsonToMT940"/>
-        <dependency component="mt940Validator"/>
-        <dependency component="isoToMT940"/>
-        <dependency component="isoAppHeadValidator"/>
-        <description>WSO2 SWIFT ISO 20022 Mediation library</description>
-    </component>
-    <type>module</type>
-</connector>
+<template xmlns="http://ws.apache.org/ns/synapse" name="isoAppHeadValidator">
+    <sequence>
+        <property expression="boolean($body//BizMsgEnvlp/app:AppHdr)" name="uri.var.IsAppHdrExists" action="set" scope="default" type="BOOLEAN" xmlns:app="urn:iso:std:iso:20022:tech:xsd:head.001.001.03"/>
+        <switch source="$ctx:uri.var.IsAppHdrExists">
+            <case regex="true">
+                <class name="org.wso2.carbon.module.swiftiso20022.ISO20022AppHead001Validator"/>
+            </case>
+        </switch>
+    </sequence>
+</template>

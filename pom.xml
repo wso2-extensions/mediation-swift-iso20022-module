@@ -238,6 +238,7 @@
             <artifactId>json</artifactId>
             <version>${org.json.version}</version>
         </dependency>
+
         <dependency>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
@@ -262,6 +263,12 @@
             <version>${powermock.version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.freemarker</groupId>
+            <artifactId>freemarker</artifactId>
+            <version>${org.freemarker.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <properties>
@@ -271,9 +278,10 @@
         <maven.assembly.version>2.4</maven.assembly.version>
         <carbon.kernel.version>4.4.17</carbon.kernel.version>
         <module.core.version>1.0.2</module.core.version>
-        <synapse.version>2.1.7-wso2v147</synapse.version>
+        <synapse.version>4.0.0-wso2v90</synapse.version>
         <carbon.mediation.version>4.6.19</carbon.mediation.version>
         <org.json.version>20231013</org.json.version>
+        <org.freemarker.version>2.3.30</org.freemarker.version>
         <maven.checkstyleplugin.version>3.1.0</maven.checkstyleplugin.version>
         <jacoco.version>0.8.6</jacoco.version>
         <mockito.version>1.10.19</mockito.version>

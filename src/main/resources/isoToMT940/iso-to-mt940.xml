@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ ~ Copyright (c) 2024, WSO2 LLC. (https://www.wso2.com).
+ ~
+ ~ WSO2 LLC. licenses this file to you under the Apache License,
+ ~ Version 2.0 (the "License"); you may not use this file except
+ ~ in compliance with the License.
+ ~ You may obtain a copy of the License at
+ ~
+ ~     http://www.apache.org/licenses/LICENSE-2.0
+ ~
+ ~ Unless required by applicable law or agreed to in writing,
+ ~ software distributed under the License is distributed on an
+ ~ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ ~ KIND, either express or implied. See the License for the
+ ~ specific language governing permissions and limitations
+ ~ under the License.
+ -->
+<template xmlns="http://ws.apache.org/ns/synapse" name="isoToMT940">
+    <sequence>
+        <class name="org.wso2.carbon.module.swiftiso20022.ISO20022Camt053Validator"/>
+        <payloadFactory media-type="text" template-type="freemarker">
+            <format>
+                <![CDATA[<#ftl ns_prefixes={"A": "urn:iso:std:iso:20022:tech:xsd:head.001.001.03", "C": "urn:iso:std:iso:20022:tech:xsd:camt.053.001.11" }>
+<#macro dateTimeFormat dateTimeInd input format><#if dateTimeInd>${input?datetime.iso?string[format]}<#else>${input?datetime("yyyy-MM-dd")?string(format)}</#if></#macro><#macro appendBranch bicCode><#if bicCode?length == 8>${bicCode + "XXX"}<#else>${bicCode}</#if></#macro><#if payload.BizMsgEnvlp?has_content><#assign docElement=payload["BizMsgEnvlp/C:Document"] /><#assign appHdrElement=payload["BizMsgEnvlp/A:AppHdr"] /><#else><#assign docElement=payload["C:Document"] /></#if><#macro getLTAddress bicCode><#if bicCode?length == 8>${bicCode + "XXXX"}<#elseif bicCode?length == 11>${bicCode?string[0..7] + "X" + bicCode?string[8..10]}<#else>${bicCode}</#if></#macro>
+{1:F01<#if appHdrElement?has_content><@getLTAddress bicCode=appHdrElement["A:To/A:FIId/A:FinInstnId/A:BICFI"]/><#else><@getLTAddress bicCode=docElement["C:BkToCstmrStmt/C:Stmt/C:Acct/C:Svcr/C:FinInstnId/C:BICFI"]/></#if>0000000000}<#if appHdrElement?has_content>{2:O940${appHdrElement["A:CreDt"]?datetime.iso?string.hh}${appHdrElement["A:CreDt"]?datetime.iso?string.mm}<@dateTimeFormat dateTimeInd=true input=appHdrElement["A:CreDt"] format="yyMMdd"/><@getLTAddress bicCode=appHdrElement["A:Fr/A:FIId/A:FinInstnId/A:BICFI"]/>0000000000${.now?string["yyMMdd"]}${.now?string["HHmm"]}N}</#if>{4:
+:20:${docElement["C:BkToCstmrStmt/C:Stmt/C:Id"]}
+<#-- 21 Tag will added when MT message triggered MT940 message -->
+:21:${docElement["C:BkToCstmrStmt/C:Stmt/C:Id"]}
+:25:${docElement["C:BkToCstmrStmt/C:Stmt/C:Acct/C:Id/C:Othr/C:Id"]}
+<#assign firstStat = true>
+:28C:${docElement["C:BkToCstmrStmt/C:Stmt/C:ElctrncSeqNb"]}/${docElement["C:BkToCstmrStmt/C:Stmt/C:LglSeqNb"]}
+  <#if docElement["C:BkToCstmrStmt/C:GrpHdr/C:MsgPgntn/C:PgNb"]?has_content && docElement["C:BkToCstmrStmt/C:GrpHdr/C:MsgPgntn/C:PgNb"] gt 1>
+     <#assign firstStat = false>
+  </#if>
+<#-- Balance elements -->
+<#assign balances = docElement["C:BkToCstmrStmt/C:Stmt/C:Bal"]>
+<#list balances as balance>
+  <#switch balance["C:Tp/C:CdOrPrtry/C:Cd"]>
+    <#case "OPBD">
+      <#assign openingBal = balance>
+      <#break>
+    <#case "CLBD">
+      <#assign closingBal = balance>
+      <#break>
+   <#case "CLAV">
+      <#assign closingAvlBal = balance>
+      <#break>
+   <#case "FWAV">
+      <#assign forwardAvlFunds = balance>
+      <#break>
+  </#switch>
+</#list>
+<#if firstStat>:60F:<#else>:60M:</#if><#if openingBal["C:CdtDbtInd"]=="CRDT">C<#else>D</#if><#if openingBal["C:Dt/C:DtTm"]?has_content><@dateTimeFormat dateTimeInd=true input=openingBal["C:Dt/C:DtTm"] format="yyMMdd"/><#else><@dateTimeFormat dateTimeInd=false input=openingBal["C:Dt/C:Dt"] format="yyMMdd"/></#if>${openingBal["C:Amt/@Ccy"]}${openingBal["C:Amt"]?split(".")[0]},${openingBal["C:Amt"]?split(".")[1]?left_pad(2,"0")}
+<#assign entries = docElement["C:BkToCstmrStmt/C:Stmt/C:Ntry"]>
+<#list entries as entry>
+<#-- Constructing account owner references -->
+<#assign accOwnerRef = "NONREF" />
+<#if entry["C:NtryDtls/C:Batch/C:MsgId"]?has_content>
+	<#assign accOwnerRef = entry["C:NtryDtls/C:Batch/C:MsgId"]/>
+<#elseif entry["C:NtryDtls/C:Batch/C:PmtInfId"]?has_content>
+	<#assign accOwnerRef = entry["C:NtryDtls/C:Batch/C:PmtInfId"]/>
+<#elseif entry["C:NtryDtls/C:TxDtls/C:Refs/C:InstrId"]?has_content>
+	<#if (entry["C:NtryDtls/C:TxDtls/C:Refs/C:InstrId"]?size > 1)>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:InstrId"][0] />
+	<#else>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:InstrId"] />
+	</#if>
+<#elseif entry["C:NtryDtls/C:TxDtls/C:Refs/C:TxId"]?has_content>
+	<#if (entry["C:NtryDtls/C:TxDtls/C:Refs/C:TxId"]?size > 1)>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:TxId"][0] />
+	<#else>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:TxId"] />
+	</#if>
+<#elseif entry["C:NtryDtls/C:TxDtls/C:Refs/C:EndToEndId"]?has_content>
+	<#if (entry["C:NtryDtls/C:TxDtls/C:Refs/C:EndToEndId"]?size > 1)>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:EndToEndId"][0] />
+	<#else>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:EndToEndId"] />
+	</#if>
+<#elseif entry["C:NtryDtls/C:TxDtls/C:Refs/C:MndtId"]?has_content>
+	<#if (entry["C:NtryDtls/C:TxDtls/C:Refs/C:MndtId"]?size > 1)>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:MndtId"][0] />
+	<#else>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:MndtId"] />
+	</#if>
+<#elseif entry["C:NtryDtls/C:TxDtls/C:Refs/C:ClrSysRef"]?has_content>
+	<#if (entry["C:NtryDtls/C:TxDtls/C:Refs/C:ClrSysRef"]?size > 1)>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:ClrSysRef"][0] />
+	<#else>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:ClrSysRef"] />
+	</#if>
+<#elseif entry["C:NtryDtls/C:TxDtls/C:Refs/C:ChqNb"]?has_content>
+	<#if (entry["C:NtryDtls/C:TxDtls/C:Refs/C:ChqNb"]?size > 1)>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:ChqNb"][0] />
+	<#else>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:ChqNb"] />
+	</#if>
+<#elseif entry["C:NtryDtls/C:TxDtls/C:Refs/C:Prtry"]?has_content>
+	<#if (entry["C:NtryDtls/C:TxDtls/C:Refs/C:Prtry"]?size > 1)>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:Prtry"][0] />
+	<#else>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:Refs/C:Prtry"] />
+	</#if>
+<#elseif entry["C:NtryDtls/C:TxDtls/C:RltdRmtInf/C:RmtId"]?has_content>
+	<#if (entry["C:NtryDtls/C:TxDtls/C:RltdRmtInf/C:RmtId"]?size > 1)>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:RltdRmtInf/C:RmtId"][0] />
+	<#else>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:RltdRmtInf/C:RmtId"] />
+	</#if>
+<#elseif entry["C:NtryDtls/C:TxDtls/C:RmtInf/C:RmtInf/C:Strd/C:CdtrRefInf"]?has_content>
+	<#if (entry["C:NtryDtls/C:TxDtls/C:RmtInf/C:RmtInf/C:Strd/C:CdtrRefInf"]?size > 1)>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:RmtInf/C:RmtInf/C:Strd/C:CdtrRefInf"][0] />
+	<#else>
+		<#assign accOwnerRef = entry["C:NtryDtls/C:TxDtls/C:RmtInf/C:RmtInf/C:Strd/C:CdtrRefInf"] />
+	</#if>
+</#if>
+<#--  Supplymentry details(Maximum 34 text) -->
+<#if entry["C:AddtlNtryInf"]?has_content>
+	<#assign supplyDtls = entry["C:AddtlNtryInf"]?string[0..33] />
+</#if>
+<#if entry["C:NtryDtls/C:TxDtls/C:AddtlTxInf"]?has_content>
+	<#if (entry["C:NtryDtls/C:TxDtls/C:AddtlTxInf"]?size > 1)>
+		<#list entry["C:NtryDtls/C:TxDtls/C:AddtlTxInf"] as details>
+			<#if supplyDtls?has_content>
+				<#if ((supplyDtls + details)?size < 34)>
+					<#assign supplyDtls = supplyDtls + "/" + details />
+			<#else>
+					<#assign supplyDtls = details />
+				</#if>
+			</#if>
+		</#list>
+	<#else>
+		<#assign details = entry["C:NtryDtls/C:TxDtls/C:AddtlTxInf"] />
+		<#if supplyDtls?has_content>
+				<#if ((supplyDtls + details)?size < 34)>
+					<#assign supplyDtls = supplyDtls + details />
+				<#else>
+					<#assign supplyDtls = details />
+				</#if>
+			</#if>
+	</#if>
+</#if>
+:61:<#if entry["C:ValDt/C:DtTm"]?has_content><@dateTimeFormat dateTimeInd=true input=entry["C:ValDt/C:DtTm"] format="yyMMdd"/><#else><@dateTimeFormat dateTimeInd=false input=entry["C:ValDt/C:Dt"] format="yyMMdd"/></#if><#if entry["C:BookgDt/C:DtTm"]?has_content><@dateTimeFormat dateTimeInd=true input=entry["C:BookgDt/C:DtTm"] format="MMdd"/><#else><@dateTimeFormat dateTimeInd=false input=entry["C:BookgDt/C:Dt"] format="MMdd"/></#if><#if entry["C:RvslInd"]?has_content && entry["C:RvslInd"]=="true">R</#if><#if entry["C:CdtDbtInd"]=="CRDT">C<#else>D</#if>${entry["C:Amt/@Ccy"]?string[2]}${entry["C:Amt"]?split(".")[0]},${entry["C:Amt"]?split(".")[1]}<#if entry["C:BkTxCd/C:Domn/C:Cd"]?has_content>${entry["C:BkTxCd/C:Domn/C:Cd"]}<#elseif entry["C:BkTxCd/C:Prtry/C:Cd"]?has_content>${entry["C:BkTxCd/C:Prtry/C:Cd"]?string[0..3]}</#if><#-- Ref for account owner -->${accOwnerRef}<#-- end of account owner --><#-- Account servicer reference --><#if entry["C:AcctSvcrRef"]?has_content>${"//" + entry["C:AcctSvcrRef"]}</#if><#-- End of Account servicer reference --><#-- Supplymentry details --><#if supplyDtls?has_content>${"\n" + supplyDtls}</#if>
+<#if entry["C:AddtlNtryInf"]?has_content || entry["C:NtryDtls/C:TxDtls/C:Refs/C:EndToEndId"]?has_content || entry["C:NtryDtls/C:TxDtls/C:Refs/C:InstrId"]?has_content || entry["C:NtryDtls/C:TxDtls/C:Refs/C:PmtInfId"]?has_content>
+<#assign entryDetails=[[]]/><#if (entry["C:NtryDtls"]?size > 1)>
+	<#list entry["C:NtryDtls"] as rowDetails>
+		<#if rowDetails["C:TxDtls"]?has_content>
+			<#assign row=[] />
+			<#if (rowDetails["C:TxDtls"]?size > 1)>
+				<#list rowDetails["C:TxDtls"] as detail>
+					<#assign rowUpdated = false>
+					<#if detail["C:Refs/C:EndToEndId"]?has_content>
+						<#if rowUpdated>
+							<#assign row = row + ["/EREF/" + detail["C:Refs/C:EndToEndId"]] />
+						<#else>
+							<#assign row = row + ["EREF/" + detail["C:Refs/C:EndToEndId"]] />
+							<#assign rowUpdated = true>
+						</#if>
+					</#if>
+					<#if detail["C:Refs/C:InstrId"]?has_content>
+						<#if rowUpdated>
+							<#assign row = row + ["/IREF/" + detail["C:Refs/C:InstrId"]] />
+						<#else>
+							<#assign row = row + ["IREF/" + detail["C:Refs/C:InstrId"]] />
+							<#assign rowUpdated = true>
+						</#if>
+					</#if>
+					<#if detail["C:Refs/C:PmtInfId"]?has_content>
+						<#if rowUpdated>
+							<#assign row = row + ["/PREF/" + detail["C:Refs/C:PmtInfId"]] />
+						<#else>
+							<#assign row = row + ["PREF/" + detail["C:Refs/C:PmtInfId"]] />
+							<#assign rowUpdated = true>
+						</#if>
+					</#if>
+					<#assign row = row + ["\n"] />
+				</#list>
+				<#assign entryDetails = entryDetails + [row] />
+			<#else>
+				<#assign rowUpdated = false>
+				<#if rowDetails["C:TxDtls/C:Refs/C:EndToEndId"]?has_content>
+					<#if rowUpdated>
+						<#assign row = row + ["/EREF/" + rowDetails["C:TxDtls/C:Refs/C:EndToEndId"]] />
+					<#else>
+						<#assign row = row + ["EREF/" + rowDetails["C:TxDtls/C:Refs/C:EndToEndId"]] />
+						<#assign rowUpdated = true>
+					</#if>
+				</#if>
+				<#if rowDetails["C:TxDtls/C:Refs/C:InstrId"]?has_content>
+					<#if rowUpdated>
+						<#assign row = row + ["/IREF/" + rowDetails["C:TxDtls/C:Refs/C:InstrId"]] />
+					<#else>
+						<#assign row = row + ["IREF/" + rowDetails["C:TxDtls/C:Refs/C:InstrId"]] />
+						<#assign rowUpdated = true>
+					</#if>
+				</#if>
+				<#if rowDetails["C:TxDtls/C:Refs/C:PmtInfId"]?has_content>
+					<#if rowUpdated>
+						<#assign row = row + ["/PREF/" + rowDetails["C:TxDtls/C:Refs/C:PmtInfId"]] />
+					<#else>
+						<#assign row = row + ["PREF/" + rowDetails["C:TxDtls/C:Refs/C:PmtInfId"]] />
+						<#assign rowUpdated = true>
+					</#if>
+				</#if>
+				<#assign row = row + ["\n"] />
+				<#assign entryDetails = entryDetails + [row] />
+			</#if>
+		</#if>
+	</#list>
+<#else>
+	<#if entry["C:NtryDtls/C:TxDtls"]?has_content>
+		<#assign row=[] />
+		<#if (entry["C:NtryDtls/C:TxDtls"]?size > 1)>
+			<#list entry["C:NtryDtls/C:TxDtls"] as detail>
+				<#assign rowUpdated = false>
+				<#if detail["C:Refs/C:EndToEndId"]?has_content>
+					<#if rowUpdated>
+						<#assign row = row + ["/EREF/" + detail["C:Refs/C:EndToEndId"]] />
+					<#else>
+						<#assign row = row + ["EREF/" + detail["C:Refs/C:EndToEndId"]] />
+						<#assign rowUpdated = true>
+					</#if>
+				</#if>
+				<#if detail["C:Refs/C:InstrId"]?has_content>
+					<#if rowUpdated>
+						<#assign row = row + ["/IREF/" + detail["C:Refs/C:InstrId"]] />
+					<#else>
+						<#assign row = row + ["IREF/" + detail["C:Refs/C:InstrId"]] />
+						<#assign rowUpdated = true>
+					</#if>
+				</#if>
+				<#if detail["C:Refs/C:PmtInfId"]?has_content>
+					<#if rowUpdated>
+						<#assign row = row + ["/PREF/" + detail["C:Refs/C:PmtInfId"]] />
+					<#else>
+						<#assign row = row + ["PREF/" + detail["C:Refs/C:PmtInfId"]] />
+						<#assign rowUpdated = true>
+					</#if>
+				</#if>
+				<#assign row = row + ["\n"] />
+			</#list>
+			<#assign entryDetails = entryDetails + [row] />
+		<#else>
+			<#assign rowUpdated = false>
+			<#if entry["C:NtryDtls/C:TxDtls/C:Refs/C:EndToEndId"]?has_content>
+				<#if rowUpdated>
+					<#assign row = row + ["/EREF/" + entry["C:NtryDtls/C:TxDtls/C:Refs/C:EndToEndId"]] />
+				<#else>
+					<#assign row = row + ["EREF/" + entry["C:NtryDtls/C:TxDtls/C:Refs/C:EndToEndId"]] />
+					<#assign rowUpdated = true>
+				</#if>
+			</#if>
+			<#if entry["C:NtryDtls/C:TxDtls/C:Refs/C:InstrId"]?has_content>
+				<#if rowUpdated>
+					<#assign row = row + ["/IREF/" + entry["C:NtryDtls/C:TxDtls/C:Refs/C:InstrId"]] />
+				<#else>
+					<#assign row = row + ["IREF/" + entry["C:NtryDtls/C:TxDtls/C:Refs/C:InstrId"]] />
+					<#assign rowUpdated = true>
+				</#if>
+			</#if>
+			<#if entry["C:NtryDtls/C:TxDtls/C:Refs/C:PmtInfId"]?has_content>
+				<#if rowUpdated>
+					<#assign row = row + ["/PREF/" + entry["C:NtryDtls/C:TxDtls/C:Refs/C:PmtInfId"]] />
+				<#else>
+					<#assign row = row + ["PREF/" + entry["C:NtryDtls/C:TxDtls/C:Refs/C:PmtInfId"]] />
+					<#assign rowUpdated = true>
+				</#if>
+			</#if>
+			<#assign row = row + ["\n"] />
+			<#assign entryDetails = entryDetails + [row] />
+		</#if>
+	</#if>
+</#if>
+:86:<#list entryDetails as row><#assign firstElement=true/><#list row as element><#if !firstElement>/</#if>${element}</#list></#list><#if entry["C:AddtlNtryInf"]?has_content><#if !firstElement>/</#if>${entry["C:AddtlNtryInf"] + "\n"}</#if></#if></#list><#if firstStat>:62F:<#else>:62M:</#if><#if closingBal["C:CdtDbtInd"]=="CRDT">C<#else>D</#if><#if closingBal["C:Dt/C:DtTm"]?has_content><@dateTimeFormat dateTimeInd=true input=closingBal["C:Dt/C:DtTm"] format="yyMMdd"/><#else><@dateTimeFormat dateTimeInd=false input=closingBal["C:Dt/C:Dt"] format="yyMMdd"/></#if>${closingBal["C:Amt/@Ccy"]}${closingBal["C:Amt"]?split(".")[0]},${closingBal["C:Amt"]?split(".")[1]}
+<#if closingAvlBal??>
+:64:<#if closingAvlBal["C:CdtDbtInd"]=="CRDT">C<#else>D</#if><#if closingAvlBal["C:Dt/C:DtTm"]?has_content><@dateTimeFormat dateTimeInd=true input=closingAvlBal["C:Dt/C:DtTm"] format="yyMMdd"/><#else><@dateTimeFormat dateTimeInd=false input=closingAvlBal["C:Dt/C:Dt"] format="yyMMdd"/></#if>${closingAvlBal["C:Amt/@Ccy"]}${closingAvlBal["C:Amt"]?split(".")[0]},${closingAvlBal["C:Amt"]?split(".")[1]}
+</#if>
+<#if forwardAvlFunds??>
+:65:<#if forwardAvlFunds["C:CdtDbtInd"]=="CRDT">C<#else>D</#if><#if forwardAvlFunds["C:Dt/C:DtTm"]?has_content><@dateTimeFormat dateTimeInd=true input=forwardAvlFunds["C:Dt/C:DtTm"] format="yyMMdd"/><#else><@dateTimeFormat dateTimeInd=false input=forwardAvlFunds["C:Dt/C:Dt"] format="yyMMdd"/></#if>${forwardAvlFunds["C:Amt/@Ccy"]}${forwardAvlFunds["C:Amt"]?split(".")[0]},${forwardAvlFunds["C:Amt"]?split(".")[1]}
+</#if>
+-}
+]]>
+            </format>
+        </payloadFactory>
+    </sequence>
+</template>

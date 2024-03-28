@@ -16,13 +16,11 @@
  ~ specific language governing permissions and limitations
  ~ under the License.
  -->
-<connector>
-    <component name="swiftISO20022" package="org.wso2.carbon.module.swiftiso20022">
-        <dependency component="jsonToMT940"/>
-        <dependency component="mt940Validator"/>
-        <dependency component="isoToMT940"/>
-        <dependency component="isoAppHeadValidator"/>
-        <description>WSO2 SWIFT ISO 20022 Mediation library</description>
-    </component>
-    <type>module</type>
-</connector>
+<component name="isoAppHeadValidator" type="synapse/template">
+    <subComponents>
+        <component name="isoAppHeadValidator">
+            <file>iso-apphead-validator.xml</file>
+            <description>Validate ISO 20022.Head.001 message</description>
+        </component>
+    </subComponents>
+</component>
